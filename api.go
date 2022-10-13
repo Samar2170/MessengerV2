@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -67,13 +68,23 @@ func login(c echo.Context) error {
 	})
 
 }
+func unwrapToken(token *jwt.Token) (*jwtCustomClaims, error) {
+	var claims jwtCustomClaims
+	tmp, _ := json.Marshal(token.Claims)
+	_ = json.Unmarshal(tmp, &claims)
+	return &claims, nil
+}
 
 func createService(c echo.Context) error {
 	serviceName := c.FormValue("service")
-	var claims jwtCustomClaims
 	user := c.Get("user").(*jwt.Token)
-	tmp, _ := json.Marshal(user.Claims)
-	_ = json.Unmarshal(tmp, &claims)
+	claims, err := unwrapToken(user)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	// var claims jwtCustomClaims
+	// tmp, _ := json.Marshal(user.Claims)
+	// _ = json.Unmarshal(tmp, &claims)
 	if serviceName == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"message": "All fields are required",
@@ -86,11 +97,37 @@ func createService(c echo.Context) error {
 	})
 }
 
+func botMessage(e echo.Context) error {
+	serviceName := e.FormValue("service")
+	message := e.FormValue("message")
+	user := e.Get("user").(*jwt.Token)
+	claims, err := unwrapToken(user)
+	if err != nil {
+		return e.String(http.StatusInternalServerError, err.Error())
+	}
+	service, err := GetServiceByUser(serviceName, claims.Id)
+	if err != nil {
+		return e.String(http.StatusInternalServerError, err.Error())
+	}
+	subscibers, err := GetSubscriberByServiceId(service.ID)
+	if err != nil {
+		return e.String(http.StatusInternalServerError, err.Error())
+	}
+	for _, subscriber := range subscibers {
+		msg := tgbotapi.NewMessage(subscriber.ChatID, message)
+		Tgbot.Send(msg)
+	}
+	return e.JSON(http.StatusOK, map[string]string{
+		"message": "Message sent",
+	})
+}
+
 func StartEcho() {
 	e := echo.New()
 	e.POST("/signup", signup)
 	e.POST("/login", login)
 	e.POST("/create-service", createService)
+	e.POST("/bot-message", botMessage)
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.JWTWithConfig(middleware.JWTConfig{

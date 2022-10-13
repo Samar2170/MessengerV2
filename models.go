@@ -59,6 +59,11 @@ func GetService(serviceName string) (Service, error) {
 	err := Db.First(&s, "name = ?", serviceName).Error
 	return s, err
 }
+func GetServiceByUser(serviceName string, userId uint) (Service, error) {
+	var s Service
+	err := Db.First(&s, "name = ? and user_id = ?", serviceName, userId).Error
+	return s, err
+}
 
 func (s Subscriber) Create() error {
 	err := Db.FirstOrCreate(&s, "chat_id = ?", s.ChatID).Error
@@ -72,4 +77,14 @@ func GetSubscriber(chatID int64) (Subscriber, error) {
 func (s Subscriptions) Create() error {
 	err := Db.Create(&s).Error
 	return err
+}
+func GetSubscriberByService(serviceName string) ([]Subscriber, error) {
+	var subscribers []Subscriber
+	err := Db.Table("subscribers").Select("subscribers.*").Joins("inner join subscriptions on subscriptions.subscriber_id = subscribers.id").Joins("inner join services on services.id = subscriptions.service_id").Where("services.name = ?", serviceName).Scan(&subscribers).Error
+	return subscribers, err
+}
+func GetSubscriberByServiceId(serviceId uint) ([]Subscriber, error) {
+	var subscribers []Subscriber
+	err := Db.Table("subscribers").Select("subscribers.*").Joins("inner join subscriptions on subscriptions.subscriber_id = subscribers.id").Joins("inner join services on services.id = subscriptions.service_id").Where("services.id = ?", serviceId).Scan(&subscribers).Error
+	return subscribers, err
 }
